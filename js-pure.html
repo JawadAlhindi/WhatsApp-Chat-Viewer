@@ -45,9 +45,10 @@
 
         .timestamp {
             font-size: 12px;
-            color: #999;
+            color: black;
             display: block;
             margin-top: 5px;
+            font-weight: bold;
         }
 
         .message-container {
@@ -127,7 +128,7 @@
         // Handle media file selection
         document.getElementById('mediaInput').addEventListener('change', function (e) {
             const files = e.target.files;
-            mediaFiles.clear(); // Clear previous media files
+            mediaFiles.clear();
 
             if (files.length === 0) {
                 mediaStatus.textContent = 'No media files selected';
@@ -138,14 +139,12 @@
 
             let loadedCount = 0;
             for (let file of files) {
-                // Convert file name to lowercase for case-insensitive matching
                 const fileName = file.name.toLowerCase();
                 mediaFiles.set(fileName, URL.createObjectURL(file));
                 loadedCount++;
             }
 
             mediaStatus.textContent = `Loaded ${loadedCount} media files`;
-            // If chat is already loaded, refresh it to show media
             const chatFile = document.getElementById('fileInput').files[0];
             if (chatFile) {
                 processChat(chatFile);
@@ -169,40 +168,44 @@
             reader.onload = function (event) {
                 const chatText = event.target.result;
                 const chatContainer = document.getElementById('chat');
-                chatContainer.innerHTML = '';  // Clear previous content
+                chatContainer.innerHTML = '';
 
                 const lines = chatText.split('\n');
                 let messageCount = 0;
                 let mediaCount = 0;
 
                 lines.forEach(line => {
-                    if (!line.trim()) return; // Skip empty lines
+                    if (!line.trim()) return;
 
                     const messageContainer = document.createElement('div');
                     messageContainer.classList.add('message-container');
 
-                    // Improved message parsing
-                    const timestampMatch = line.match(/^\[?(.+?)\]?\s*-\s*/);
-                    if (!timestampMatch) return; // Skip invalid lines
+                    // Parse timestamp
+                    const timestampMatch = line.match(/^\[(.+?)\]\s*/);
+                    if (!timestampMatch) return;
 
                     const timestamp = timestampMatch[1];
                     let content = line.slice(timestampMatch[0].length);
 
-                    // Split sender name and message
+                    // Parse full sender name up to the colon
                     const senderMatch = content.match(/^([^:]+):\s*/);
-                    if (!senderMatch) return; // Skip invalid lines
+                    if (!senderMatch) return;
 
-                    const sender = senderMatch[1];
+                    const senderFullName = senderMatch[1].trim();
                     content = content.slice(senderMatch[0].length);
 
-                    const isSent = sender.includes('Ala\'aldeen');
+                    const isSent = senderFullName.includes('Ala\'aldeen');
 
                     const messageDiv = document.createElement('div');
                     messageDiv.classList.add('message', isSent ? 'sent' : 'received');
 
-                    const timestampDiv = document.createElement('span');
-                    timestampDiv.classList.add('timestamp');
-                    timestampDiv.textContent = timestamp;
+                    // Add sender name for received messages
+                    if (!isSent) {
+                        const senderDiv = document.createElement('div');
+                        senderDiv.classList.add('sender-name');
+                        senderDiv.textContent = senderFullName;
+                        messageDiv.appendChild(senderDiv);
+                    }
 
                     // Handle attached files
                     if (content.includes('<attached:')) {
@@ -252,12 +255,18 @@
                         }
                     } else {
                         const messageText = document.createElement('div');
-                        messageText.classList.add('message-text');
                         messageText.textContent = content;
+                        messageText.classList.add('message-text');
+                        messageText.dir = 'auto';
                         messageDiv.appendChild(messageText);
                     }
 
-                    messageContainer.appendChild(timestampDiv);
+                    // Add timestamp at the bottom of the message
+                    const timestampDiv = document.createElement('div');
+                    timestampDiv.classList.add('timestamp');
+                    timestampDiv.textContent = timestamp;
+                    messageDiv.appendChild(timestampDiv);
+
                     messageContainer.appendChild(messageDiv);
                     chatContainer.appendChild(messageContainer);
                     messageCount++;
@@ -268,6 +277,50 @@
 
             reader.readAsText(file);
         }
+
+        // Updated CSS for new layout
+        const style = document.createElement('style');
+        style.textContent = `
+    .message-container {
+        margin: 8px 0;
+    }
+    .message {
+        padding: 8px;
+        border-radius: 8px;
+        position: relative;
+        max-width: 80%;
+    }
+    .sent {
+        background-color: #dcf8c6;
+        margin-left: auto;
+    }
+    .received {
+        background-color: #fff;
+        margin-right: auto;
+    }
+    .sender-name {
+        font-weight: bold;
+        margin-bottom: 4px;
+    }
+    .message-text {
+        margin-bottom: 4px;
+    }
+    .timestamp {
+        color: #666;
+        font-size: 0.75em;
+        margin-top: 4px;
+        text-align: right;
+    }
+    .media {
+        max-width: 100%;
+        margin: 4px 0;
+    }
+    .file-name {
+        margin: 4px 0;
+        color: #666;
+    }
+`;
+        document.head.appendChild(style);
     </script>
 </body>
 

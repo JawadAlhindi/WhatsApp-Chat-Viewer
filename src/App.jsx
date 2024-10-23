@@ -1,143 +1,158 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { MessageSquare, Paperclip, File } from 'lucide-react';
-import './index.css'; // Assuming you have Tailwind directives in this file
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageSquare, Paperclip, File, Trash2, AlertCircle } from 'lucide-react';
+
+// Custom Alert Component
+const Alert = ({ children, className = "" }) => (
+  <div className={`bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative ${className}`}>
+    {children}
+  </div>
+);
+
+// Predefined colors for senders with better contrast and accessibility
+const SENDER_COLORS = [
+  '#2563eb', // Blue
+  '#16a34a', // Green
+  '#ea580c', // Orange
+  '#9333ea', // Purple
+  '#0891b2', // Cyan
+  '#4f46e5', // Indigo
+  '#be123c', // Rose
+  '#854d0e', // Amber
+];
 
 const parseTimestamp = (line) => {
-  try {
-    const match = line.match(/^\[?(.+?)\]?\s*-\s*/);
-    return match ? { timestamp: match[1], rest: line.slice(match[0].length) } : null;
-  } catch (error) {
-    console.error('Error parsing timestamp:', error);
-    return null;
-  }
+  const match = line.match(/^\[(.+?)\]\s*/);
+  return match ? { timestamp: match[1], rest: line.slice(match[0].length) } : null;
 };
 
 const parseSender = (content) => {
-  try {
-    const match = content.match(/^([^:]+):\s*/);
-    return match ? { sender: match[1], message: content.slice(match[0].length) } : null;
-  } catch (error) {
-    console.error('Error parsing sender:', error);
-    return null;
-  }
+  const match = content.match(/^([^:]+):\s*/);
+  return match ? { sender: match[1].trim(), message: content.slice(match[0].length) } : null;
 };
 
 const getMediaType = (fileName) => {
-  if (!fileName) return 'file';
-  const lower = fileName.toLowerCase();
-  if (lower.match(/\.(jpg|jpeg|png|gif)$/i)) return 'image';
-  if (lower.match(/\.(mp4|webm)$/i)) return 'video';
-  if (lower.match(/\.(opus|mp3|m4a|ogg)$/i)) return 'audio';
-  return 'file';
+  const ext = fileName.toLowerCase().split('.').pop();
+  const mediaTypes = {
+    image: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+    video: ['mp4', 'webm', 'mov'],
+    audio: ['mp3', 'ogg', 'm4a', 'wav'],
+  };
+  
+  return Object.entries(mediaTypes).find(([_, exts]) => exts.includes(ext))?.[0] || 'file';
 };
 
 const MediaPreview = React.memo(({ fileName, mediaUrl, type }) => {
   const [error, setError] = useState(false);
-  const commonClasses = "rounded-lg max-w-full mt-2";
-
+  const [loading, setLoading] = useState(true);
+  
+  const handleLoad = () => setLoading(false);
   const handleError = () => {
-    console.error(`Error loading media: ${fileName}`);
     setError(true);
+    setLoading(false);
   };
+
+  const commonClasses = "rounded-lg max-w-full mt-2 transition-opacity duration-200";
+  const loadingClasses = loading ? "opacity-0" : "opacity-100";
 
   if (error) {
     return (
-      <div className="text-red-500 text-sm mt-2">
-        Failed to load media: {fileName}
-      </div>
+      <Alert className="mt-2">
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          <span>Failed to load media: {fileName}</span>
+        </div>
+      </Alert>
     );
   }
 
-  switch (type) {
-    case 'image':
-      return (
-        <img 
-          src={mediaUrl} 
-          alt={fileName} 
-          className={`${commonClasses} max-h-60 object-contain`}
-          loading="lazy"
-          onError={handleError}
-        />
-      );
-    case 'video':
-      return (
-        <video 
-          src={mediaUrl} 
-          controls 
-          className={commonClasses}
-          onError={handleError}
-        />
-      );
-    case 'audio':
-      return (
-        <audio 
-          src={mediaUrl} 
-          controls 
-          className="w-full mt-2"
-          onError={handleError}
-        />
-      );
-    default:
-      return (
-        <a 
-          href={mediaUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 flex items-center gap-2 mt-2"
-        >
-          <File size={16} />
-          {fileName}
-        </a>
-      );
-  }
+  const mediaElements = {
+    image: (
+      <img 
+        src={mediaUrl} 
+        alt={fileName} 
+        className={`${commonClasses} ${loadingClasses} max-h-60 object-contain`}
+        loading="lazy"
+        onLoad={handleLoad}
+        onError={handleError}
+      />
+    ),
+    video: (
+      <video 
+        src={mediaUrl} 
+        controls 
+        className={`${commonClasses} ${loadingClasses}`}
+        onLoadedData={handleLoad}
+        onError={handleError}
+      />
+    ),
+    audio: (
+      <audio 
+        src={mediaUrl} 
+        controls 
+        className={`w-full mt-2 ${loadingClasses}`}
+        onLoadedData={handleLoad}
+        onError={handleError}
+      />
+    ),
+    file: (
+      <a 
+        href={mediaUrl}
+        download={fileName}
+        className="text-blue-600 hover:text-blue-800 flex items-center gap-2 mt-2"
+      >
+        <File size={16} />
+        {fileName}
+      </a>
+    )
+  };
+
+  return (
+    <div className="relative">
+      {loading && type !== 'file' && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      {mediaElements[type]}
+    </div>
+  );
 });
 
-const Message = React.memo(({ data, mediaFiles }) => {
-  const { timestamp, sender, content, isSent } = data;
+const Message = React.memo(({ data, mediaFiles, colorMap }) => {
+  const { timestamp, sender, content } = data;
   const mediaMatch = content.match(/<attached:\s*([^>]+)>/);
   const fileName = mediaMatch ? mediaMatch[1].trim().toLowerCase() : null;
   const mediaUrl = fileName ? mediaFiles.get(fileName) : null;
   const mediaType = fileName ? getMediaType(fileName) : null;
 
+  // Get or assign a consistent color for the sender
+  const senderColor = useCallback(() => {
+    if (!colorMap.has(sender)) {
+      const existingColors = new Set(Array.from(colorMap.values()));
+      const availableColors = SENDER_COLORS.filter(color => !existingColors.has(color));
+      const newColor = availableColors.length > 0 
+        ? availableColors[0] 
+        : SENDER_COLORS[colorMap.size % SENDER_COLORS.length];
+      colorMap.set(sender, newColor);
+    }
+    return colorMap.get(sender);
+  }, [sender, colorMap])();
+
   return (
-    <div className={`flex ${isSent ? 'justify-end' : 'justify-start'} mb-4`}>
-      <div 
-        className={`max-w-[70%] rounded-lg p-3 relative ${
-          isSent 
-            ? 'bg-[#d9fdd3] text-right rounded-br-none'  // WhatsApp-like sent message bubble
-            : 'bg-white text-left rounded-bl-none'       // WhatsApp-like received message bubble
-        } shadow-sm`}
-      >
-        {!isSent && (
-          <div className="text-sm font-medium text-gray-800 mb-1">
+    <div className="mb-4 animate-fadeIn">
+      <div className="bg-white rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+        <div className="flex justify-between items-start">
+          <div className="font-bold" style={{ color: senderColor }}>
             {sender}
           </div>
-        )}
-        <div className="text-sm text-gray-700 break-words whitespace-pre-wrap">
-          {content}
+          <div className="text-xs text-gray-500">{timestamp}</div>
         </div>
-        {mediaMatch && (
-          <div>
-            <div className="text-xs text-gray-500 mb-1">
-              {fileName}
-            </div>
-            {mediaUrl ? (
-              <MediaPreview 
-                fileName={fileName}
-                mediaUrl={mediaUrl}
-                type={mediaType}
-              />
-            ) : (
-              <div className="text-sm text-gray-500 flex items-center gap-2">
-                <Paperclip size={16} />
-                Media not available
-              </div>
-            )}
-          </div>
-        )}
-        <div className="text-xs text-gray-500 mt-2">
-          {timestamp}
+        <div className="mt-2 mb-2 break-words whitespace-pre-wrap">
+          {mediaMatch ? content.replace(mediaMatch[0], '').trim() : content}
         </div>
+        {mediaMatch && mediaUrl && (
+          <MediaPreview fileName={fileName} mediaUrl={mediaUrl} type={mediaType} />
+        )}
       </div>
     </div>
   );
@@ -145,31 +160,32 @@ const Message = React.memo(({ data, mediaFiles }) => {
 
 const VirtualizedChat = React.memo(({ messages, mediaFiles }) => {
   const scrollRef = useRef(null);
-  const [isAutoScroll, setIsAutoScroll] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const colorMap = useRef(new Map()).current;
 
   useEffect(() => {
-    if (isAutoScroll && scrollRef.current) {
+    if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isAutoScroll]);
+  }, [messages, autoScroll]);
 
   const handleScroll = useCallback((e) => {
-    const element = e.target;
-    const isAtBottom = element.scrollHeight - element.scrollTop === element.clientHeight;
-    setIsAutoScroll(isAtBottom);
+    const { scrollHeight, scrollTop, clientHeight } = e.target;
+    setAutoScroll(Math.abs(scrollHeight - scrollTop - clientHeight) < 10);
   }, []);
 
   return (
     <div 
-      ref={scrollRef}
-      className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#efeae2]"  // WhatsApp chat background color
+      ref={scrollRef} 
+      className="overflow-y-auto p-4 bg-[#efeae2] h-full scroll-smooth"
       onScroll={handleScroll}
     >
-      {messages.map((message, index) => (
+      {messages.map((msg, idx) => (
         <Message 
-          key={`${message.timestamp}-${index}`}
-          data={message}
-          mediaFiles={mediaFiles}
+          key={`${msg.timestamp}-${idx}`} 
+          data={msg} 
+          mediaFiles={mediaFiles} 
+          colorMap={colorMap} 
         />
       ))}
     </div>
@@ -180,127 +196,109 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [mediaFiles, setMediaFiles] = useState(new Map());
   const [status, setStatus] = useState({ chat: 'No chat loaded', media: 'No media loaded' });
-  const [error, setError] = useState(null);
 
   const handleMediaUpload = useCallback((e) => {
-    try {
-      const files = Array.from(e.target.files || []);
-      if (files.length === 0) {
-        setStatus(prev => ({ ...prev, media: 'No media files selected' }));
-        return;
-      }
-
-      setStatus(prev => ({ ...prev, media: `Loading ${files.length} media files...` }));
-      
-      const newMediaFiles = new Map(mediaFiles);
-      files.forEach(file => {
-        const fileName = file.name.toLowerCase();
-        newMediaFiles.set(fileName, URL.createObjectURL(file));
-      });
-
-      setMediaFiles(newMediaFiles);
-      setStatus(prev => ({ ...prev, media: `Loaded ${files.length} media files` }));
-      setError(null);
-    } catch (error) {
-      console.error('Error handling media upload:', error);
-      setError('Failed to load media files. Please try again.');
-      setStatus(prev => ({ ...prev, media: 'Error loading media files' }));
+    const files = Array.from(e.target.files);
+    if (!files.length) {
+      setStatus(prev => ({ ...prev, media: 'No media files selected' }));
+      return;
     }
-  }, [mediaFiles]);
+
+    setMediaFiles(prev => {
+      const newMap = new Map(prev);
+      files.forEach(file => {
+        const url = URL.createObjectURL(file);
+        newMap.set(file.name.toLowerCase(), url);
+      });
+      return newMap;
+    });
+
+    setStatus(prev => ({ ...prev, media: `Loaded ${files.length} media files` }));
+  }, []);
 
   const handleChatUpload = useCallback((e) => {
-    try {
-      const file = e.target.files?.[0];
-      if (!file) {
-        setStatus(prev => ({ ...prev, chat: 'No chat file selected' }));
-        return;
-      }
-
-      setStatus(prev => ({ ...prev, chat: 'Loading chat...' }));
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const lines = event.target.result.split('\n');
-          const parsedMessages = lines
-            .filter(line => line.trim())
-            .map(line => {
-              const timestampData = parseTimestamp(line);
-              if (!timestampData) return null;
-
-              const senderData = parseSender(timestampData.rest);
-              if (!senderData) return null;
-
-              return {
-                timestamp: timestampData.timestamp,
-                sender: senderData.sender,
-                content: senderData.message,
-                isSent: senderData.sender.includes('Ala\'aldeen')
-              };
-            })
-            .filter(Boolean);
-
-          setMessages(parsedMessages);
-          setStatus(prev => ({ 
-            ...prev, 
-            chat: `Loaded ${parsedMessages.length} messages` 
-          }));
-          setError(null);
-        } catch (error) {
-          console.error('Error parsing chat file:', error);
-          setError('Failed to parse chat file. Please try again.');
-          setStatus(prev => ({ ...prev, chat: 'Error parsing chat file' }));
-        }
-      };
-      reader.readAsText(file);
-    } catch (error) {
-      console.error('Error reading chat file:', error);
-      setError('Failed to load chat file. Please try again.');
-      setStatus(prev => ({ ...prev, chat: 'Error loading chat file' }));
+    const file = e.target.files?.[0];
+    if (!file) {
+      setStatus(prev => ({ ...prev, chat: 'No chat file selected' }));
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const lines = event.target.result.split('\n');
+      const parsedMessages = lines
+        .map(line => {
+          const timestampData = parseTimestamp(line);
+          if (!timestampData) return null;
+
+          const senderData = parseSender(timestampData.rest);
+          if (!senderData) return null;
+
+          return {
+            timestamp: timestampData.timestamp,
+            sender: senderData.sender,
+            content: senderData.message,
+          };
+        })
+        .filter(Boolean);
+
+      setMessages(parsedMessages);
+      setStatus(prev => ({ ...prev, chat: `Loaded ${parsedMessages.length} messages` }));
+    };
+
+    reader.readAsText(file);
   }, []);
+
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    mediaFiles.forEach(url => URL.revokeObjectURL(url));
+    setMediaFiles(new Map());
+    setStatus({ chat: 'No chat loaded', media: 'No media loaded' });
+  }, [mediaFiles]);
 
   useEffect(() => {
     return () => {
-      mediaFiles.forEach((url) => URL.revokeObjectURL(url));
+      mediaFiles.forEach(url => URL.revokeObjectURL(url));
     };
   }, [mediaFiles]);
 
   return (
-    <div className="flex flex-col h-screen bg-[#e5ddd5]"> {/* WhatsApp background color */}
-      <header className="p-4 bg-[#075E54] text-white flex justify-between items-center"> {/* WhatsApp header color */}
+    <div className="flex flex-col h-screen bg-[#e5ddd5]">
+      <header className="p-4 bg-[#075E54] text-white flex justify-between items-center">
         <h1 className="text-lg font-semibold">WhatsApp Chat Viewer</h1>
         <div className="flex items-center gap-4">
-          <label className="cursor-pointer flex items-center gap-2">
-            <MessageSquare />
+          <label className="cursor-pointer flex items-center gap-2 hover:bg-[#054c44] p-2 rounded transition-colors">
+            <MessageSquare className="h-5 w-5" />
+            <span>Load Chat</span>
             <input 
               type="file"
               accept=".txt"
               className="hidden"
               onChange={handleChatUpload}
             />
-            Load Chat
           </label>
-          <label className="cursor-pointer flex items-center gap-2">
-            <Paperclip />
+          {/* <label className="cursor-pointer flex items-center gap-2 hover:bg-[#054c44] p-2 rounded transition-colors">
+            <Paperclip className="h-5 w-5" />
+            <span>Upload Media</span>
             <input 
               type="file"
               multiple
-              onChange={handleMediaUpload}
               className="hidden"
+              onChange={handleMediaUpload}
             />
-            Upload Media
-          </label>
+          </label> */}
+          <button 
+            onClick={clearChat}
+            className="flex items-center gap-2 hover:bg-[#054c44] p-2 rounded transition-colors"
+          >
+            <Trash2 className="h-5 w-5" />
+            <span>Clear Chat</span>
+          </button>
         </div>
       </header>
-      <main className="flex flex-col flex-1 overflow-hidden">
-        <VirtualizedChat messages={messages} mediaFiles={mediaFiles} />
-      </main>
-      <footer className="p-4 bg-gray-200 text-gray-600 text-sm">
+      <VirtualizedChat messages={messages} mediaFiles={mediaFiles} />
+      <footer className="p-4 text-center text-sm text-gray-500 bg-white border-t">
         {status.chat} | {status.media}
-        {error && (
-          <div className="text-red-500 mt-2">{error}</div>
-        )}
       </footer>
     </div>
   );
