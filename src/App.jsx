@@ -266,6 +266,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-[#e5ddd5]">
       <header className="p-4 bg-[#075E54] text-white flex justify-between items-center">
         <h1 className="text-lg font-semibold">WhatsApp Chat Viewer</h1>
+        <h6 className="text-sm  ">Media will be available soon :)</h6>  
         <div className="flex items-center gap-4">
           <label className="cursor-pointer flex items-center gap-2 hover:bg-[#054c44] p-2 rounded transition-colors">
             <MessageSquare className="h-5 w-5" />
